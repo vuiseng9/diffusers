@@ -21,7 +21,7 @@ from ..configuration_utils import ConfigMixin, register_to_config
 from ..utils import BaseOutput
 from .modeling_utils import ModelMixin
 from .vae import Decoder, DecoderOutput, DiagonalGaussianDistribution, Encoder
-
+from torchinfo.benchutils import timeit, DUMP_MODELSUMMARY
 
 @dataclass
 class AutoencoderKLOutput(BaseOutput):
@@ -113,6 +113,15 @@ class AutoencoderKL(ModelMixin, ConfigMixin):
 
     def _decode(self, z: torch.FloatTensor, return_dict: bool = True) -> Union[DecoderOutput, torch.FloatTensor]:
         z = self.post_quant_conv(z)
+        if DUMP_MODELSUMMARY:
+            from torchinfo import summary
+            print("\n\n"+'-'*100+"\n{} Summary".format(self.decoder.__class__.__name__))
+            summary(self.decoder, 
+                    input_data=z, 
+                    depth=4, 
+                    col_width=35,
+                    col_names=("mult_adds", "input_size", "output_size", "num_params"))
+
         dec = self.decoder(z)
 
         if not return_dict:
@@ -136,6 +145,7 @@ class AutoencoderKL(ModelMixin, ConfigMixin):
         """
         self.use_slicing = False
 
+    @timeit
     def decode(self, z: torch.FloatTensor, return_dict: bool = True) -> Union[DecoderOutput, torch.FloatTensor]:
         if self.use_slicing and z.shape[0] > 1:
             decoded_slices = [self._decode(z_slice).sample for z_slice in z.split(1)]

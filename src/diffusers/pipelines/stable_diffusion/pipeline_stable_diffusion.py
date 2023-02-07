@@ -28,6 +28,7 @@ from ..pipeline_utils import DiffusionPipeline
 from . import StableDiffusionPipelineOutput
 from .safety_checker import StableDiffusionSafetyChecker
 
+from torchinfo.benchutils import timeit, DUMP_MODELSUMMARY, StopWatch
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -258,6 +259,15 @@ class StableDiffusionPipeline(DiffusionPipeline):
         else:
             attention_mask = None
 
+        if DUMP_MODELSUMMARY:
+            from torchinfo import summary
+            print("\n\n"+'-'*100+"\n{} Summary".format(self.text_encoder.__class__.__name__))
+            summary(self.text_encoder, 
+                    input_data=text_input_ids.to(device), 
+                    depth=4, 
+                    col_width=33,
+                    col_names=("mult_adds", "input_size", "output_size", "num_params"))
+
         text_embeddings = self.text_encoder(
             text_input_ids.to(device),
             attention_mask=attention_mask,
@@ -391,6 +401,7 @@ class StableDiffusionPipeline(DiffusionPipeline):
 
     @torch.no_grad()
     @replace_example_docstring(EXAMPLE_DOC_STRING)
+    @timeit
     def __call__(
         self,
         prompt: Union[str, List[str]],
@@ -468,6 +479,8 @@ class StableDiffusionPipeline(DiffusionPipeline):
         height = height or self.unet.config.sample_size * self.vae_scale_factor
         width = width or self.unet.config.sample_size * self.vae_scale_factor
 
+        stopwatch = StopWatch()
+
         # 1. Check inputs. Raise error if not correct
         self.check_inputs(prompt, height, width, callback_steps)
 
@@ -479,15 +492,17 @@ class StableDiffusionPipeline(DiffusionPipeline):
         # corresponds to doing no classifier free guidance.
         do_classifier_free_guidance = guidance_scale > 1.0
 
+        stopwatch("Pre-text-encoder")
         # 3. Encode input prompt
         text_embeddings = self._encode_prompt(
             prompt, device, num_images_per_prompt, do_classifier_free_guidance, negative_prompt
         )
-
+        stopwatch("_encode_prompt")
         # 4. Prepare timesteps
         self.scheduler.set_timesteps(num_inference_steps, device=device)
         timesteps = self.scheduler.timesteps
 
+        stopwatch("Prepare timesteps")
         # 5. Prepare latent variables
         num_channels_latents = self.unet.in_channels
         latents = self.prepare_latents(
@@ -500,9 +515,13 @@ class StableDiffusionPipeline(DiffusionPipeline):
             generator,
             latents,
         )
-
+        stopwatch("Prepare latents")
         # 6. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
         extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
+        stopwatch("prepare_extra_step_kwargs")
+
+        if DUMP_MODELSUMMARY:
+            entry_count = 0
 
         # 7. Denoising loop
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
@@ -511,6 +530,17 @@ class StableDiffusionPipeline(DiffusionPipeline):
                 # expand the latents if we are doing classifier free guidance
                 latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
                 latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
+
+                if DUMP_MODELSUMMARY:
+                    if entry_count < 1:
+                        from torchinfo import summary
+                        print("\n\n"+'-'*100+"\n{} Summary".format(self.unet.__class__.__name__))
+                        summary(self.unet, 
+                                input_data=[latent_model_input, t, text_embeddings], 
+                                depth=4, 
+                                col_width=33,
+                                col_names=("mult_adds", "input_size", "output_size", "num_params"))
+                        entry_count += 1
 
                 # predict the noise residual
                 noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample
@@ -528,9 +558,11 @@ class StableDiffusionPipeline(DiffusionPipeline):
                     progress_bar.update()
                     if callback is not None and i % callback_steps == 0:
                         callback(i, t, latents)
+        stopwatch("Denoising loop - reverse diffusion (UNet) for {} timesteps".format(num_inference_steps))
 
         # 8. Post-processing
         image = self.decode_latents(latents)
+        stopwatch("VAE Decoder (Unet decoder)")
 
         # 9. Run safety checker
         image, has_nsfw_concept = self.run_safety_checker(image, device, text_embeddings.dtype)
@@ -541,5 +573,6 @@ class StableDiffusionPipeline(DiffusionPipeline):
 
         if not return_dict:
             return (image, has_nsfw_concept)
-
+        stopwatch("post-process such as numpy_to_pil")
+        stopwatch.report()
         return StableDiffusionPipelineOutput(images=image, nsfw_content_detected=has_nsfw_concept)

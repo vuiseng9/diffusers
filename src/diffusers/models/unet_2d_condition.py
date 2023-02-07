@@ -34,7 +34,7 @@ from .unet_2d_blocks import (
     get_down_block,
     get_up_block,
 )
-
+from torchinfo.benchutils import timeit, DUMP_MODELSUMMARY
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -390,6 +390,7 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
         if isinstance(module, (CrossAttnDownBlock2D, DownBlock2D, CrossAttnUpBlock2D, UpBlock2D)):
             module.gradient_checkpointing = value
 
+    @timeit
     def forward(
         self,
         sample: torch.FloatTensor,
