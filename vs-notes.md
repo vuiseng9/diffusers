@@ -4,7 +4,7 @@
 ```bash
 git clone https://github.com/vuiseng9/diffusers
 cd diffusers
-git checkout -b ldm-profile
+git checkout ldm-profile
 pip install -e .[torch]
 ```
 
@@ -12,7 +12,7 @@ pip install -e .[torch]
 ```bash
 git clone https://github.com/vuiseng9/transformers
 cd transformers
-git checkout -b v4.24-ldm-profile
+git checkout v4.24-ldm-profile
 pip install -e .
 ```
 
@@ -25,7 +25,7 @@ pip install accelerate scipy ftfy
 ```bash
 git clone https://github.com/vuiseng9/torchinfo
 cd torchinfo
-git checkout -b ldm-profile
+git checkout ldm-profile
 pip install -e .
 ```
 
