@@ -523,6 +523,9 @@ class StableDiffusionPipeline(DiffusionPipeline):
         if DUMP_MODELSUMMARY:
             entry_count = 0
 
+        if hasattr(self, "dump_leaf_csv"):
+            unet_loop_count = 0
+
         # 7. Denoising loop
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
         with self.progress_bar(total=num_inference_steps) as progress_bar:
@@ -545,6 +548,14 @@ class StableDiffusionPipeline(DiffusionPipeline):
                 # predict the noise residual
                 noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample
 
+                if hasattr(self, "dump_leaf_csv"):
+                    unet_loop_count += 1
+                    if unet_loop_count == 1:
+                        import pandas as pd
+                        pd.DataFrame.from_dict(self.leaf_layer_list).to_csv(f"{self.unet.__class__.__name__}_leaf_layer.csv", index=False)
+                        # for l in self.leaf_layer_list:
+                            # print(f"{l['forward_order']:5} | {l['module_type']:10} | {l['torch_name']}")
+                        print("joto")
                 # perform guidance
                 if do_classifier_free_guidance:
                     noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
