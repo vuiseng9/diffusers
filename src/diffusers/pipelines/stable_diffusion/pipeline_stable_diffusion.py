@@ -28,7 +28,7 @@ from ..pipeline_utils import DiffusionPipeline
 from . import StableDiffusionPipelineOutput
 from .safety_checker import StableDiffusionSafetyChecker
 
-from torchinfo.benchutils import timeit, DUMP_MODELSUMMARY, StopWatch
+from torchinfo.benchutils import timeit, DUMP_MODELSUMMARY, StopWatch, DUMP_MODEL_ARCH
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -522,6 +522,9 @@ class StableDiffusionPipeline(DiffusionPipeline):
 
         if DUMP_MODELSUMMARY:
             entry_count = 0
+            
+        if DUMP_MODEL_ARCH:
+            dump_model_arch_count = 0
 
         if hasattr(self, "dump_leaf_csv"):
             unet_loop_count = 0
@@ -548,6 +551,31 @@ class StableDiffusionPipeline(DiffusionPipeline):
                 # predict the noise residual
                 noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample
 
+                if DUMP_MODEL_ARCH:
+                    if dump_model_arch_count == 0:
+                        from torch.utils.tensorboard import SummaryWriter
+                        from torch._jit_internal import get_callable_argument_names
+                        from collections import OrderedDict
+
+                        # keys = get_callable_argument_names(self.unet.forward)
+                        # inputs = OrderedDict()
+
+                        # for k in keys:
+                        #     inputs[k]=None
+                        
+                        # inputs['sample'] = latent_model_input
+                        # inputs['timestep'] = t
+                        # inputs['encoder_hidden_states'] = text_embeddings
+
+                        writer = SummaryWriter(f"{self.unet.__class__.__name__}_graph/")
+                        writer.add_graph(model=self.unet, 
+                                         input_to_model=(latent_model_input, t, text_embeddings), 
+                                         verbose=True,
+                                         use_strict_trace=False) # many attempts to make strict work but failed
+                        writer.close()
+                        print("Dumped graph to tensorboard!")
+                    dump_model_arch_count += 1
+
                 if hasattr(self, "dump_leaf_csv"):
                     unet_loop_count += 1
                     if unet_loop_count == 1:
@@ -555,7 +583,7 @@ class StableDiffusionPipeline(DiffusionPipeline):
                         pd.DataFrame.from_dict(self.leaf_layer_list).to_csv(f"{self.unet.__class__.__name__}_leaf_layer.csv", index=False)
                         # for l in self.leaf_layer_list:
                             # print(f"{l['forward_order']:5} | {l['module_type']:10} | {l['torch_name']}")
-                        print("joto")
+
                 # perform guidance
                 if do_classifier_free_guidance:
                     noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
