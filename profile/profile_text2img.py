@@ -160,7 +160,7 @@ def summarize_timedict(timedict, pipe_mean, nloop=10):
 # [Transformer2DModel]
 # [ResnetBlock2D]
 ROOTDIR=os.path.dirname(os.path.abspath(__file__))
-WORKDIR=os.path.join(ROOTDIR, "t2i-sdv1.5-n20")
+WORKDIR=os.path.join(ROOTDIR, "text2img-sdv1.5-diffstep20-res512")
 os.makedirs(WORKDIR, exist_ok=True)
 
 # this function require access to WORKDIR
@@ -182,8 +182,8 @@ def elapsed_time(pipeline, nb_pass=10, num_inference_steps=20):
     end = time.time()
     return (end - start) / nb_pass, image.images[0]
 
-#warmup
-# elapsed_time(pipe)
+# warmup
+elapsed_time(pipe)
 
 print_divider()
 time_original_model, image = elapsed_time(pipe)
@@ -215,49 +215,22 @@ def profile_by_block(block_type_list, timedict, top_module, pipe,  label):
 # -----------------------------
 majorblock_list = ["CrossAttnDownBlock2D", "DownBlock2D", "UpBlock2D", "UNetMidBlock2DCrossAttn", "CrossAttnUpBlock2D"]
 majorblock_timedict = OrderedDict()
-hook_tuple = wrap_timeit_by_modtypelist(majorblock_list, majorblock_timedict)
-top_module_hook = wrap_timeit_by_modtypelist([top_module.__class__.__name__], majorblock_timedict)
-
-# profiling loop
-time_majorblock_elapse, image = elapsed_time(pipe)
-image.save(f"{WORKDIR}/pipe.1.png", "PNG")
-df_majorblock, top_mean_latency, pipe_mean_latency = summarize_timedict(majorblock_timedict, time_majorblock_elapse)
-print_divider()
-postprocess(df_majorblock, top_mean_latency, pipe_mean_latency, "majorblock_latency")
-remove_hook(hook_tuple)
-remove_hook(top_module_hook)
-print_divider()
-
-
+df_majorblock = profile_by_block(majorblock_list, majorblock_timedict, top_module, pipe, "majorblock_latency")
 # -----------------------------
 resblock_type = ["ResnetBlock2D"]
 resblock_timedict = OrderedDict()
-hook_tuple = wrap_timeit_by_modtypelist(resblock_type, resblock_timedict)
-top_module_hook = wrap_timeit_by_modtypelist([top_module.__class__.__name__], resblock_timedict)
-
-# profiling loop
-time_resblock_elapse, image = elapsed_time(pipe)
-image.save(f"{WORKDIR}/pipe.2.png", "PNG")
-df_resblock, top_mean_latency, pipe_mean_latency = summarize_timedict(resblock_timedict, time_resblock_elapse)
-print_divider()
-postprocess(df_resblock, top_mean_latency, pipe_mean_latency, "resblock_latency")
-remove_hook(hook_tuple)
-remove_hook(top_module_hook)
-print_divider()
+df_resblock = profile_by_block(resblock_type, resblock_timedict, top_module, pipe, "resblock_latency")
 # -----------------------------
 txblock_type = ["Transformer2DModel"]
 txblock_timedict = OrderedDict()
-hook_tuple = wrap_timeit_by_modtypelist(txblock_type, txblock_timedict)
-top_module_hook = wrap_timeit_by_modtypelist([top_module.__class__.__name__], txblock_timedict)
-
-# profiling loop
-time_txblock_elapse, image = elapsed_time(pipe)
-image.save(f"{WORKDIR}/pipe.3.png", "PNG")
-df_txblock, top_mean_latency, pipe_mean_latency = summarize_timedict(txblock_timedict, time_txblock_elapse)
-print_divider()
-postprocess(df_txblock, top_mean_latency, pipe_mean_latency, "txblock_latency")
-remove_hook(hook_tuple)
-remove_hook(top_module_hook)
-print_divider()
+df_txblock = profile_by_block(txblock_type, txblock_timedict, top_module, pipe, "txblock_latency")
+# -----------------------------
+conv2d_type = ["Conv2d"]
+conv2d_timedict = OrderedDict()
+df_conv2d = profile_by_block(conv2d_type, conv2d_timedict, top_module, pipe, "conv2d_latency")
+# -----------------------------
+linear_type = ["Linear"]
+linear_timedict = OrderedDict()
+df_linear = profile_by_block(linear_type, linear_timedict, top_module, pipe, "linear_latency")
 # -----------------------------
 print("End of script.")

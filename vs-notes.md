@@ -17,3 +17,9 @@ git remote add upstream https://github.com/huggingface/transformers
 git checkout v4.27.4 -b v4.27.4
 pip install -e .
 ```
+
+### Sample profiling
+```
+cd diffusers
+python3 profile_text2img.py 2>&1 | tee -a log.text2img-sdv1.5-diffstep20-res512
+```
