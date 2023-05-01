@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import os
 
-pipe = StableDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5", torch_dtype=torch.float16).to("cuda")
+pipe = StableDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5", torch_dtype=torch.bfloat16).to("cpu")
 
 def print_divider():
     print('-'*100)
@@ -160,7 +160,7 @@ def summarize_timedict(timedict, pipe_mean, nloop=10):
 # [Transformer2DModel]
 # [ResnetBlock2D]
 ROOTDIR=os.path.dirname(os.path.abspath(__file__))
-WORKDIR=os.path.join(ROOTDIR, "text2img-sdv1.5-diffstep20-res512")
+WORKDIR=os.path.join(ROOTDIR, "spr-text2img-sdv1.5-diffstep20-res512")
 os.makedirs(WORKDIR, exist_ok=True)
 
 # this function require access to WORKDIR
